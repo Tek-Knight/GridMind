@@ -106,6 +106,18 @@ for i, load in LOADS.items():
                 send_command(i)
                 st.rerun()
 
+
+st.subheader("Relay Control")
+
+if "relay_on" not in st.session_state:
+    st.session_state.relay_on = False
+
+if st.button("Turn Relay ON" if not st.session_state.relay_on else "Turn Relay OFF"):
+    if send_command(4):
+        st.session_state.relay_on = not st.session_state.relay_on
+        st.rerun()
+
+
 st.subheader("Estimated Electricity Cost")
 st.metric(
     "Accumulated cost",
