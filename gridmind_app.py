@@ -1,6 +1,9 @@
 import streamlit as st
-import serial
+import requests
 import time
+
+BRIDGE_URL = st.secrets["BRIDGE_URL"].rstrip("/")
+BRIDGE_TOKEN = st.secrets["BRIDGE_TOKEN"]
 
 st.set_page_config(page_title="GridMind", page_icon="⚡", layout="wide")
 st.title("⚡ GridMind")
@@ -21,22 +24,36 @@ if "energy" not in st.session_state:
     st.session_state.energy = 0.0
 if "last_time" not in st.session_state:
     st.session_state.last_time = time.time()
-if "device" not in st.session_state:
-    st.session_state.device = None
+if "bridge_connected" not in st.session_state:
+    st.session_state.bridge_connected = False
+
 
 def connect():
-    if st.session_state.device is None:
-        try:
-            st.session_state.device = serial.Serial(
-                "/dev/ttyACM0", 9600, timeout=1
-            )
-            time.sleep(2)
-            st.session_state.device.write(b"0")
-            return True
-        except Exception as e:
-            st.error(f"Connection failed: {e}")
-            return False
-    return True
+    try:
+        response = requests.get(
+            f"{BRIDGE_URL}/health", timeout=10
+        )
+        response.raise_for_status()
+        return True
+    except Exception as e:
+        st.error(f"Bridge connection failed: {e}")
+        return False
+
+
+def send_command(command):
+    try:
+        response = requests.post(
+            f"{BRIDGE_URL}/command",
+            json={"command": str(command)},
+            headers={"Authorization": f"Bearer {BRIDGE_TOKEN}"},
+            timeout=10,
+        )
+        response.raise_for_status()
+        return True
+    except Exception as e:
+        st.error(f"Arduino command failed: {e}")
+        return False
+
 
 now = time.time()
 elapsed = (now - st.session_state.last_time) / 3600
@@ -46,10 +63,11 @@ st.session_state.last_time = now
 
 st.sidebar.header("Device")
 if st.sidebar.button("Connect Arduino"):
-    connect()
+    st.session_state.bridge_connected = connect()
 
 st.sidebar.caption(
-    "Connected" if st.session_state.device else "Not connected"
+    "Bridge connected" if st.session_state.bridge_connected
+    else "Not connected"
 )
 
 c1, c2, c3 = st.columns(3)
@@ -74,8 +92,7 @@ for i, load in LOADS.items():
     if i in st.session_state.active:
         if col3.button("Turn OFF", key=f"off{i}"):
             st.session_state.active.remove(i)
-            if st.session_state.device:
-                st.session_state.device.write(str(i).encode())
+            send_command(i)
             st.rerun()
     else:
         if col3.button("Turn ON", key=f"on{i}"):
@@ -86,8 +103,7 @@ for i, load in LOADS.items():
                 st.warning("Rejected: power budget exceeded.")
             else:
                 st.session_state.active.add(i)
-                if st.session_state.device:
-                    st.session_state.device.write(str(i).encode())
+                send_command(i)
                 st.rerun()
 
 st.subheader("Estimated Electricity Cost")
