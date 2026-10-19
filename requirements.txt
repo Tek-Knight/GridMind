@@ -2,3 +2,5 @@ streamlit
 pyserial
 pandas
 requests
+scikit-learn
+numpy
